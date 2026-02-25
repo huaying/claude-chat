@@ -1,4 +1,5 @@
 import type { WebClient } from "@slack/web-api";
+import { mdToSlack } from "./formatter";
 
 /**
  * Manages Slack message updates with debouncing to respect rate limits.
@@ -23,7 +24,7 @@ export class MessageUpdater {
    * Updates are debounced to avoid Slack rate limits.
    */
   update(messageTs: string, fullText: string): void {
-    this.pendingText = this.truncate(fullText);
+    this.pendingText = this.truncate(mdToSlack(fullText));
     this.pendingTs = messageTs;
 
     if (this.debounceTimer) {
@@ -40,13 +41,13 @@ export class MessageUpdater {
    */
   async finalize(messageTs: string, finalText: string): Promise<void> {
     this.cancelDebounce();
-    const text = this.truncate(finalText) || "_Done_";
+    const text = this.truncate(mdToSlack(finalText)) || "_done_";
     await this.safeUpdate(messageTs, text);
   }
 
   async finalizeWithError(messageTs: string, error: string): Promise<void> {
     this.cancelDebounce();
-    await this.safeUpdate(messageTs, `:x: Error: ${error}`);
+    await this.safeUpdate(messageTs, `Error: ${error}`);
   }
 
   async flush(): Promise<void> {

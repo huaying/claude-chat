@@ -32,7 +32,7 @@ export function buildApprovalBlocks(
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `:hammer: *Claude wants to run \`${toolName}\`*\n\`\`\`${inputSummary}\`\`\``,
+        text: `*Tool request:* \`${toolName}\`\n\`\`\`${inputSummary}\`\`\``,
       },
     },
     {
@@ -40,14 +40,14 @@ export function buildApprovalBlocks(
       elements: [
         {
           type: "button",
-          text: { type: "plain_text", text: "Approve", emoji: true },
+          text: { type: "plain_text", text: "Approve" },
           style: "primary",
           action_id: ACTION_APPROVE,
           value: JSON.stringify(metadata),
         },
         {
           type: "button",
-          text: { type: "plain_text", text: "Deny", emoji: true },
+          text: { type: "plain_text", text: "Deny" },
           style: "danger",
           action_id: ACTION_DENY,
           value: JSON.stringify(metadata),

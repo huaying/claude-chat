@@ -50,7 +50,7 @@ export class Session {
       await this.client.chat.postMessage({
         channel: this.state.channelId,
         thread_ts: this.state.threadTs,
-        text: "⏳ Please approve or deny the pending tool request first.",
+        text: "Please approve or deny the pending tool request first.",
       });
       return;
     }
@@ -59,7 +59,7 @@ export class Session {
       await this.client.chat.postMessage({
         channel: this.state.channelId,
         thread_ts: this.state.threadTs,
-        text: "⏳ Claude is still working on the previous request. Please wait.",
+        text: "Claude is still working on the previous request.",
       });
       return;
     }

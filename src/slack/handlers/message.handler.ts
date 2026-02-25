@@ -28,7 +28,7 @@ export function registerMessageHandler(
     if (!existsSync(newDir)) {
       await say({
         thread_ts: threadTs,
-        text: `:warning: Directory not found: \`${newDir}\``,
+        text: `Directory not found: \`${newDir}\``,
       });
       return;
     }
@@ -38,7 +38,7 @@ export function registerMessageHandler(
 
     await say({
       thread_ts: threadTs,
-      text: `:white_check_mark: Working directory: \`${newDir}\``,
+      text: `Working directory: \`${newDir}\``,
     });
   });
 
@@ -55,7 +55,7 @@ export function registerMessageHandler(
     await sessionManager.destroy(channelId, threadTs);
     await say({
       thread_ts: threadTs,
-      text: ":recycle: Session reset. Claude will start fresh on your next message.",
+      text: "Session reset.",
     });
   });
 
