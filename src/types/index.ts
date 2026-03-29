@@ -1,14 +1,16 @@
+import type { PlatformContext, MessageHandle } from "../platform/Platform";
+import type { AutoApproveConfig } from "../approval/AutoApprovePolicy";
+
 // ─── Session ────────────────────────────────────────────────────────────────
 
 export interface SessionState {
-  channelId: string;
-  threadTs: string;
+  ctx: PlatformContext;
   claudeSessionId: string | null;
   workingDir: string;
   createdAt: Date;
   lastActivityAt: Date;
   status: SessionStatus;
-  activeMessageTs: string | null;
+  activeMessageHandle: MessageHandle | null;
   activeMessageText: string;
 }
 
@@ -44,11 +46,25 @@ export interface ApprovalActionMetadata {
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
+export interface SlackConfig {
+  botToken: string;
+  appToken: string;
+  signingSecret: string;
+}
+
+export interface DiscordConfig {
+  botToken: string;
+}
+
+export interface TelegramConfig {
+  botToken: string;
+}
+
 export interface AppConfig {
-  slack: {
-    botToken: string;
-    appToken: string;
-    signingSecret: string;
+  platforms: {
+    slack?: SlackConfig;
+    discord?: DiscordConfig;
+    telegram?: TelegramConfig;
   };
   claude: {
     defaultWorkingDir: string;
@@ -60,4 +76,5 @@ export interface AppConfig {
     debounceMs: number;
     maxMessageLength: number;
   };
+  autoApprove: AutoApproveConfig;
 }

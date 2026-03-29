@@ -1,45 +1,49 @@
 import "dotenv/config";
-import { App } from "@slack/bolt";
 import { loadConfig } from "./config";
-import { SessionManager } from "./session/SessionManager";
-import { registerMessageHandler } from "./slack/handlers/message.handler";
-import { registerActionHandler } from "./slack/handlers/action.handler";
+import { SlackBot } from "./slack/SlackBot";
+import { DiscordBot } from "./discord/DiscordBot";
+import { TelegramBot } from "./telegram/TelegramBot";
 
 async function main(): Promise<void> {
   const config = loadConfig();
+  const bots: Array<{ stop(): void }> = [];
 
-  const app = new App({
-    token: config.slack.botToken,
-    signingSecret: config.slack.signingSecret,
-    socketMode: true,
-    appToken: config.slack.appToken,
-  });
+  // ── Slack ──
+  if (config.platforms.slack) {
+    const slackBot = new SlackBot(config.platforms.slack, config);
+    await slackBot.start();
+    bots.push(slackBot);
+  }
 
-  const sessionManager = new SessionManager(config, app.client);
+  // ── Discord ──
+  if (config.platforms.discord) {
+    const discordBot = new DiscordBot(config.platforms.discord, config);
+    await discordBot.start();
+    bots.push(discordBot);
+  }
 
-  registerMessageHandler(app, sessionManager);
-  registerActionHandler(app, sessionManager);
+  // ── Telegram ──
+  if (config.platforms.telegram) {
+    const telegramBot = new TelegramBot(config.platforms.telegram, config);
+    await telegramBot.start();
+    bots.push(telegramBot);
+  }
 
-  app.error(async (error) => {
-    console.error("[Bolt] Unhandled error:", error);
-  });
-
-  process.on("SIGTERM", () => {
-    console.log("[main] Shutting down…");
-    sessionManager.dispose();
-    process.exit(0);
-  });
-
-  process.on("SIGINT", () => {
-    console.log("[main] Shutting down…");
-    sessionManager.dispose();
-    process.exit(0);
-  });
-
-  await app.start();
-  console.log("✅ claude-slack-bridge is running (Socket Mode)");
+  console.log("✅ claude-chat is running");
   console.log(`   Default working dir: ${config.claude.defaultWorkingDir}`);
-  console.log("   Commands: /cd <path>  |  /claude-reset");
+  if (config.autoApprove.enabled) {
+    const tools = config.autoApprove.rules.map((r) => r.tool).join(", ");
+    console.log(`   Auto-approve: ${tools}`);
+  }
+
+  const shutdown = () => {
+    console.log("[main] Shutting down…");
+    bots.forEach((b) => b.stop());
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
 
 main().catch((err) => {

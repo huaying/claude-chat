@@ -1,7 +1,7 @@
 {
-  "name": "claude-slack-bridge",
+  "name": "claude-chat",
   "version": "1.0.0",
-  "description": "Bridge Claude Agent SDK with Slack for remote control",
+  "description": "Bridge Claude Agent SDK with Slack, Discord, and Telegram",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
@@ -10,7 +10,9 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
     "@slack/bolt": "^3.22.0",
+    "discord.js": "^14.25.1",
     "dotenv": "^16.4.0",
+    "telegraf": "^4.16.3",
     "zod": "^4.0.0"
   },
   "devDependencies": {

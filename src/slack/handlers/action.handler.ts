@@ -1,5 +1,5 @@
 import type { App } from "@slack/bolt";
-import type { SessionManager } from "../../session/SessionManager";
+import type { SessionManager } from "../../core/SessionManager";
 import { ACTION_APPROVE, ACTION_DENY } from "../../types/index";
 import type { ApprovalActionMetadata } from "../../types/index";
 
@@ -17,12 +17,18 @@ export function registerActionHandler(
     const meta = parseMetadata(body);
     if (!meta) return;
 
-    const session = sessionManager.get(meta.channelId, meta.threadTs);
+    const session = sessionManager.get({
+      channelId: meta.channelId,
+      threadId: meta.threadTs,
+    });
     if (!session) return;
 
     const found = session.resolveApproval(meta.approvalKey, true);
     if (!found) {
-      console.warn("[action] Approval key not found (already resolved?):", meta.approvalKey);
+      console.warn(
+        "[action] Approval key not found (already resolved?):",
+        meta.approvalKey
+      );
     }
   });
 
@@ -32,12 +38,18 @@ export function registerActionHandler(
     const meta = parseMetadata(body);
     if (!meta) return;
 
-    const session = sessionManager.get(meta.channelId, meta.threadTs);
+    const session = sessionManager.get({
+      channelId: meta.channelId,
+      threadId: meta.threadTs,
+    });
     if (!session) return;
 
     const found = session.resolveApproval(meta.approvalKey, false);
     if (!found) {
-      console.warn("[action] Approval key not found (already resolved?):", meta.approvalKey);
+      console.warn(
+        "[action] Approval key not found (already resolved?):",
+        meta.approvalKey
+      );
     }
   });
 }

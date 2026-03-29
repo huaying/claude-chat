@@ -3,64 +3,61 @@ import type {
   SDKMessage,
   PermissionResult,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { WebClient } from "@slack/web-api";
+import type { Platform, PlatformContext } from "../platform/Platform";
 import { ApprovalGate } from "../approval/ApprovalGate";
-import { MessageUpdater } from "../slack/MessageUpdater";
-import { buildApprovalBlocks } from "../slack/blocks";
+import { AutoApprovePolicy } from "../approval/AutoApprovePolicy";
+import { StreamingUpdater } from "./StreamingUpdater";
 import type { SessionState, AppConfig } from "../types/index";
 
 export class Session {
   public state: SessionState;
   private abortController: AbortController | null = null;
   private approvalGate: ApprovalGate;
-  private updater: MessageUpdater;
+  private updater: StreamingUpdater;
 
   constructor(
-    channelId: string,
-    threadTs: string,
+    ctx: PlatformContext,
     private readonly config: AppConfig,
-    private readonly client: WebClient
+    private readonly platform: Platform,
+    private readonly autoApprovePolicy: AutoApprovePolicy
   ) {
     this.state = {
-      channelId,
-      threadTs,
+      ctx,
       claudeSessionId: null,
       workingDir: config.claude.defaultWorkingDir,
       createdAt: new Date(),
       lastActivityAt: new Date(),
       status: "idle",
-      activeMessageTs: null,
+      activeMessageHandle: null,
       activeMessageText: "",
     };
     this.approvalGate = new ApprovalGate();
-    this.updater = new MessageUpdater(
-      client,
-      channelId,
+    this.updater = new StreamingUpdater(
+      platform,
+      ctx,
       config.streaming.debounceMs,
       config.streaming.maxMessageLength
     );
   }
 
   /**
-   * Handle a user message from Slack.
+   * Handle a user message from the chat platform.
    * Runs a Claude query and streams results back.
    */
   async handleUserMessage(text: string): Promise<void> {
     if (this.state.status === "awaiting_approval") {
-      await this.client.chat.postMessage({
-        channel: this.state.channelId,
-        thread_ts: this.state.threadTs,
-        text: "Please approve or deny the pending tool request first.",
-      });
+      await this.platform.postMessage(
+        this.state.ctx,
+        "Please approve or deny the pending tool request first."
+      );
       return;
     }
 
     if (this.state.status === "thinking") {
-      await this.client.chat.postMessage({
-        channel: this.state.channelId,
-        thread_ts: this.state.threadTs,
-        text: "Claude is still working on the previous request.",
-      });
+      await this.platform.postMessage(
+        this.state.ctx,
+        "Claude is still working on the previous request."
+      );
       return;
     }
 
@@ -70,12 +67,11 @@ export class Session {
     this.abortController = new AbortController();
 
     // Post an initial placeholder message that we'll update as Claude streams
-    const initial = await this.client.chat.postMessage({
-      channel: this.state.channelId,
-      thread_ts: this.state.threadTs,
-      text: "_thinking…_",
-    });
-    this.state.activeMessageTs = initial.ts ?? null;
+    const handle = await this.platform.postMessage(
+      this.state.ctx,
+      "_thinking…_"
+    );
+    this.state.activeMessageHandle = handle;
 
     try {
       console.log(`[Session] Running query: "${text.slice(0, 80)}"`);
@@ -84,8 +80,11 @@ export class Session {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[Session] Query error:`, msg);
-      if (this.state.activeMessageTs) {
-        await this.updater.finalizeWithError(this.state.activeMessageTs, msg);
+      if (this.state.activeMessageHandle) {
+        await this.updater.finalizeWithError(
+          this.state.activeMessageHandle,
+          msg
+        );
       }
       this.state.status = "error";
       return;
@@ -95,12 +94,12 @@ export class Session {
   }
 
   /**
-   * Resolve a pending tool approval from a Slack button click.
+   * Resolve a pending tool approval from a button click.
    */
   resolveApproval(approvalKey: string, approved: boolean): boolean {
     return this.approvalGate.resolve(approvalKey, {
       approved,
-      reason: approved ? undefined : "Denied by user in Slack",
+      reason: approved ? undefined : "Denied by user",
     });
   }
 
@@ -144,7 +143,9 @@ export class Session {
         ...resumeOpts,
       },
     })) {
-      console.log(`[Session] event: ${event.type}${("subtype" in event ? "/" + event.subtype : "")}`);
+      console.log(
+        `[Session] event: ${event.type}${"subtype" in event ? "/" + event.subtype : ""}`
+      );
       await this.handleEvent(event);
     }
   }
@@ -160,16 +161,17 @@ export class Session {
         break;
 
       case "assistant": {
-        // Collect text blocks from the assistant message
-        const text = (event.message.content as Array<{ type: string; text?: string }>)
+        const text = (
+          event.message.content as Array<{ type: string; text?: string }>
+        )
           .filter((b) => b.type === "text" && typeof b.text === "string")
           .map((b) => b.text as string)
           .join("");
 
-        if (text && this.state.activeMessageTs) {
+        if (text && this.state.activeMessageHandle) {
           this.state.activeMessageText += text;
           this.updater.update(
-            this.state.activeMessageTs,
+            this.state.activeMessageHandle,
             this.state.activeMessageText
           );
         }
@@ -177,26 +179,28 @@ export class Session {
       }
 
       case "result": {
-        if (!this.state.activeMessageTs) break;
+        if (!this.state.activeMessageHandle) break;
 
         if (event.subtype === "success") {
           const finalText = event.result || this.state.activeMessageText;
-          console.log(`[Session] result/success: result.length=${event.result.length}, accumulated.length=${this.state.activeMessageText.length}, using.length=${finalText.length}`);
+          console.log(
+            `[Session] result/success: result.length=${event.result.length}, accumulated.length=${this.state.activeMessageText.length}, using.length=${finalText.length}`
+          );
           await this.updater.finalize(
-            this.state.activeMessageTs,
+            this.state.activeMessageHandle,
             finalText
           );
           // Post cost/turn footnote
           const cost = event.total_cost_usd.toFixed(4);
-          await this.client.chat.postMessage({
-            channel: this.state.channelId,
-            thread_ts: this.state.threadTs,
-            text: `_Cost: $${cost} | Turns: ${event.num_turns}_`,
-          });
+          await this.platform.postMessage(
+            this.state.ctx,
+            `_Cost: $${cost} | Turns: ${event.num_turns}_`
+          );
         } else {
-          const errors = "errors" in event ? event.errors.join("; ") : event.subtype;
+          const errors =
+            "errors" in event ? event.errors.join("; ") : event.subtype;
           await this.updater.finalizeWithError(
-            this.state.activeMessageTs,
+            this.state.activeMessageHandle,
             errors
           );
         }
@@ -206,52 +210,42 @@ export class Session {
   }
 
   /**
-   * Intercepts tool calls and asks the user for approval via Slack.
-   * Pauses the Claude query loop until Approve/Deny is clicked.
+   * Intercepts tool calls. Checks auto-approve policy first,
+   * then falls through to human approval via the platform UI.
    */
   private async requestToolApproval(
     toolName: string,
     input: Record<string, unknown>,
     signal: AbortSignal
   ): Promise<PermissionResult> {
+    // Auto-approve if policy allows
+    if (this.autoApprovePolicy.shouldAutoApprove(toolName)) {
+      console.log(`[Session] Auto-approved tool: ${toolName}`);
+      return { behavior: "allow", updatedInput: input };
+    }
+
     this.state.status = "awaiting_approval";
 
     // Unique key for this approval request
-    const approvalKey = `${this.state.threadTs}::${Date.now()}`;
+    const approvalKey = `${this.state.ctx.threadId}::${Date.now()}`;
 
-    const msg = await this.client.chat.postMessage({
-      channel: this.state.channelId,
-      thread_ts: this.state.threadTs,
-      blocks: buildApprovalBlocks(
-        toolName,
-        input,
-        this.state.channelId,
-        this.state.threadTs,
-        approvalKey
-      ) as any[],
-      text: `Claude wants to run: ${toolName}`,
-    });
-    const approvalMsgTs = msg.ts!;
+    const approvalHandle = await this.platform.postApprovalRequest(
+      this.state.ctx,
+      toolName,
+      input,
+      approvalKey
+    );
 
     try {
       // Block here until the user clicks a button
       const decision = await this.approvalGate.wait(approvalKey, signal);
 
-      // Delete the approval message — no need to keep it in the thread
-      try {
-        await this.client.chat.delete({
-          channel: this.state.channelId,
-          ts: approvalMsgTs,
-        });
-      } catch {
-        // If delete fails (e.g. missing scope), fall back to a minimal update
-        await this.client.chat.update({
-          channel: this.state.channelId,
-          ts: approvalMsgTs,
-          text: decision.approved ? `\`${toolName}\` — allowed` : `\`${toolName}\` — denied`,
-          blocks: [],
-        }).catch(() => {});
-      }
+      // Dismiss the approval message
+      await this.platform.dismissApprovalRequest(
+        this.state.ctx,
+        approvalHandle,
+        { approved: decision.approved, toolName }
+      );
 
       this.state.status = "thinking";
 

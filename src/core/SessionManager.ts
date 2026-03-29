@@ -1,10 +1,11 @@
-import type { WebClient } from "@slack/web-api";
+import type { Platform, PlatformContext } from "../platform/Platform";
 import { Session } from "./Session";
+import { AutoApprovePolicy } from "../approval/AutoApprovePolicy";
 import type { AppConfig } from "../types/index";
 
 /**
- * Registry mapping "channelId::threadTs" → Session.
- * Handles creation, retrieval, timeout cleanup, and destruction.
+ * Registry mapping "channelId::threadId" → Session.
+ * Each platform gets its own SessionManager instance.
  */
 export class SessionManager {
   private sessions = new Map<string, Session>();
@@ -12,7 +13,8 @@ export class SessionManager {
 
   constructor(
     private readonly config: AppConfig,
-    private readonly client: WebClient
+    private readonly platform: Platform,
+    private readonly autoApprovePolicy: AutoApprovePolicy
   ) {
     // Prune expired sessions every 5 minutes
     this.cleanupInterval = setInterval(
@@ -21,23 +23,23 @@ export class SessionManager {
     );
   }
 
-  getOrCreate(channelId: string, threadTs: string): Session {
-    const key = this.key(channelId, threadTs);
+  getOrCreate(ctx: PlatformContext): Session {
+    const key = this.key(ctx);
     if (!this.sessions.has(key)) {
       this.sessions.set(
         key,
-        new Session(channelId, threadTs, this.config, this.client)
+        new Session(ctx, this.config, this.platform, this.autoApprovePolicy)
       );
     }
     return this.sessions.get(key)!;
   }
 
-  get(channelId: string, threadTs: string): Session | undefined {
-    return this.sessions.get(this.key(channelId, threadTs));
+  get(ctx: PlatformContext): Session | undefined {
+    return this.sessions.get(this.key(ctx));
   }
 
-  async destroy(channelId: string, threadTs: string): Promise<void> {
-    const key = this.key(channelId, threadTs);
+  async destroy(ctx: PlatformContext): Promise<void> {
+    const key = this.key(ctx);
     const session = this.sessions.get(key);
     if (session) {
       await session.destroy();
@@ -49,8 +51,8 @@ export class SessionManager {
     clearInterval(this.cleanupInterval);
   }
 
-  private key(channelId: string, threadTs: string): string {
-    return `${channelId}::${threadTs}`;
+  private key(ctx: PlatformContext): string {
+    return `${ctx.channelId}::${ctx.threadId}`;
   }
 
   private async pruneExpired(): Promise<void> {
