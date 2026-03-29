@@ -16,12 +16,11 @@ const EnvSchema = z.object({
   // Claude
   DEFAULT_WORKING_DIR: z.string().default("/tmp/claude-workspace"),
 
-  // Session
-  SESSION_TIMEOUT_MS: z.coerce.number().default(1_800_000),
-
   // Streaming
   STREAM_DEBOUNCE_MS: z.coerce.number().default(1_500),
-  MAX_SLACK_MESSAGE_LENGTH: z.coerce.number().default(3_000),
+  MAX_MESSAGE_LENGTH_SLACK: z.coerce.number().default(3_000),
+  MAX_MESSAGE_LENGTH_DISCORD: z.coerce.number().default(1_900),
+  MAX_MESSAGE_LENGTH_TELEGRAM: z.coerce.number().default(4_000),
 
   // Auto-approve
   AUTO_APPROVE_TOOLS: z.string().default(""),
@@ -81,10 +80,13 @@ export function loadConfig(): AppConfig {
     claude: {
       defaultWorkingDir: env.DEFAULT_WORKING_DIR,
     },
-    session: { timeoutMs: env.SESSION_TIMEOUT_MS },
     streaming: {
       debounceMs: env.STREAM_DEBOUNCE_MS,
-      maxMessageLength: env.MAX_SLACK_MESSAGE_LENGTH,
+      maxMessageLength: {
+        slack: env.MAX_MESSAGE_LENGTH_SLACK,
+        discord: env.MAX_MESSAGE_LENGTH_DISCORD,
+        telegram: env.MAX_MESSAGE_LENGTH_TELEGRAM,
+      },
     },
     autoApprove: {
       enabled: autoApproveTools.length > 0,

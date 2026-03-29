@@ -13,7 +13,10 @@ import type {
 import { mdToDiscord } from "./formatter";
 
 export class DiscordPlatform implements Platform {
-  constructor(private readonly client: Client) {}
+  constructor(
+    private readonly client: Client,
+    public readonly maxMessageLength: number
+  ) {}
 
   async postMessage(
     ctx: PlatformContext,
@@ -87,7 +90,9 @@ export class DiscordPlatform implements Platform {
           content: `\`${outcome.toolName}\` — ${label}`,
           components: [],
         });
-      } catch {}
+      } catch (err) {
+        console.error("[DiscordPlatform] Failed to dismiss approval:", (err as Error).message);
+      }
     }
   }
 

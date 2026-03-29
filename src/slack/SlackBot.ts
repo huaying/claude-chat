@@ -18,7 +18,7 @@ export class SlackBot {
       appToken: slackConfig.appToken,
     });
 
-    const platform = new SlackPlatform(this.app.client);
+    const platform = new SlackPlatform(this.app.client, appConfig.streaming.maxMessageLength.slack);
     const autoApprovePolicy = new AutoApprovePolicy(appConfig.autoApprove);
     this.sessionManager = new SessionManager(
       appConfig,

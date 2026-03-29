@@ -69,12 +69,13 @@ export interface AppConfig {
   claude: {
     defaultWorkingDir: string;
   };
-  session: {
-    timeoutMs: number;
-  };
   streaming: {
     debounceMs: number;
-    maxMessageLength: number;
+    maxMessageLength: {
+      slack: number;
+      discord: number;
+      telegram: number;
+    };
   };
   autoApprove: AutoApproveConfig;
 }

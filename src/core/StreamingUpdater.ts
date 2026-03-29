@@ -15,9 +15,12 @@ export class StreamingUpdater {
   constructor(
     private readonly platform: Platform,
     private readonly ctx: PlatformContext,
-    private readonly debounceMs: number,
-    private readonly maxLength: number
+    private readonly debounceMs: number
   ) {}
+
+  private get maxLength(): number {
+    return this.platform.maxMessageLength;
+  }
 
   /**
    * Called frequently as Claude streams text.

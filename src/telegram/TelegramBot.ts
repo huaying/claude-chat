@@ -3,6 +3,7 @@ import { TelegramPlatform } from "./TelegramPlatform";
 import { SessionManager } from "../core/SessionManager";
 import { AutoApprovePolicy } from "../approval/AutoApprovePolicy";
 import type { AppConfig, TelegramConfig } from "../types/index";
+import { listClaudeSessions, formatSessionList } from "../core/sessions";
 
 export class TelegramBot {
   private bot: Telegraf;
@@ -11,7 +12,7 @@ export class TelegramBot {
   constructor(telegramConfig: TelegramConfig, appConfig: AppConfig) {
     this.bot = new Telegraf(telegramConfig.botToken);
 
-    const platform = new TelegramPlatform(this.bot);
+    const platform = new TelegramPlatform(this.bot, appConfig.streaming.maxMessageLength.telegram);
     const autoApprovePolicy = new AutoApprovePolicy(appConfig.autoApprove);
     this.sessionManager = new SessionManager(
       appConfig,
@@ -36,8 +37,9 @@ export class TelegramBot {
       });
 
       // Handle commands
-      if (/^\/cd\s+(.+)$/i.test(text)) {
-        const newDir = text.match(/^\/cd\s+(.+)$/i)![1].trim();
+      const cdMatch = text.match(/^\/cd\s+(.+)$/i);
+      if (cdMatch) {
+        const newDir = cdMatch[1].trim();
         const { existsSync } = await import("node:fs");
         if (!existsSync(newDir)) {
           await ctx.reply(`Directory not found: \`${newDir}\``, {
@@ -52,13 +54,41 @@ export class TelegramBot {
         return;
       }
 
+      if (/^\/sessions$/i.test(text)) {
+        const sessions = await listClaudeSessions();
+        await ctx.reply(formatSessionList(sessions));
+        return;
+      }
+
+      const resumeMatch = text.match(/^\/resume\s+(.+)$/i);
+      if (resumeMatch) {
+        const input = resumeMatch[1].trim();
+        const sessions = await listClaudeSessions();
+        const match = sessions.find((s) => s.sessionId.startsWith(input));
+        if (!match) {
+          await ctx.reply(`Session not found: ${input}\nUse !sessions to list available sessions.`);
+          return;
+        }
+        if (match.active) {
+          await ctx.reply(`Session ${match.sessionId.slice(0, 8)} is still active (PID ${match.pid}). Close it in the terminal first.`);
+          return;
+        }
+        session.resumeSession(match.sessionId);
+        session.setWorkingDir(match.cwd);
+        const name = match.name ? ` (${match.name})` : "";
+        await ctx.reply(`Resumed session ${match.sessionId.slice(0, 8)}${name}\nWorking dir: ${match.cwd}`);
+        return;
+      }
+
       if (/^\/claude[-_]?reset$/i.test(text)) {
         await this.sessionManager.destroy({ channelId: chatId, threadId });
         await ctx.reply("Session reset.");
         return;
       }
 
-      void session.handleUserMessage(text);
+      session.handleUserMessage(text).catch((err) => {
+        console.error("[Telegram] Message handler error:", err);
+      });
     });
 
     // Handle approval button clicks

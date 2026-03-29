@@ -35,8 +35,7 @@ export class Session {
     this.updater = new StreamingUpdater(
       platform,
       ctx,
-      config.streaming.debounceMs,
-      config.streaming.maxMessageLength
+      config.streaming.debounceMs
     );
   }
 
@@ -62,15 +61,23 @@ export class Session {
     }
 
     this.state.lastActivityAt = new Date();
-    this.state.status = "thinking";
     this.state.activeMessageText = "";
     this.abortController = new AbortController();
 
     // Post an initial placeholder message that we'll update as Claude streams
-    const handle = await this.platform.postMessage(
-      this.state.ctx,
-      "_thinking…_"
-    );
+    let handle;
+    try {
+      handle = await this.platform.postMessage(
+        this.state.ctx,
+        "_thinking…_"
+      );
+    } catch (err: unknown) {
+      console.error("[Session] Failed to post thinking message:", err);
+      this.state.status = "error";
+      return;
+    }
+
+    this.state.status = "thinking";
     this.state.activeMessageHandle = handle;
 
     try {
@@ -101,6 +108,13 @@ export class Session {
       approved,
       reason: approved ? undefined : "Denied by user",
     });
+  }
+
+  /**
+   * Resume a Claude Code session by its ID (from terminal or another session).
+   */
+  resumeSession(sessionId: string): void {
+    this.state.claudeSessionId = sessionId;
   }
 
   /**
@@ -229,12 +243,19 @@ export class Session {
     // Unique key for this approval request
     const approvalKey = `${this.state.ctx.threadId}::${Date.now()}`;
 
-    const approvalHandle = await this.platform.postApprovalRequest(
-      this.state.ctx,
-      toolName,
-      input,
-      approvalKey
-    );
+    let approvalHandle;
+    try {
+      approvalHandle = await this.platform.postApprovalRequest(
+        this.state.ctx,
+        toolName,
+        input,
+        approvalKey
+      );
+    } catch (err) {
+      console.error("[Session] Failed to post approval request:", err);
+      this.state.status = "thinking";
+      return { behavior: "deny", message: "Failed to post approval UI" };
+    }
 
     try {
       // Block here until the user clicks a button
@@ -245,7 +266,9 @@ export class Session {
         this.state.ctx,
         approvalHandle,
         { approved: decision.approved, toolName }
-      );
+      ).catch((err) => {
+        console.error("[Session] Failed to dismiss approval message:", err);
+      });
 
       this.state.status = "thinking";
 

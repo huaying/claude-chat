@@ -8,7 +8,10 @@ import { buildApprovalBlocks } from "./blocks";
 import { mdToSlack } from "./formatter";
 
 export class SlackPlatform implements Platform {
-  constructor(private readonly client: WebClient) {}
+  constructor(
+    private readonly client: WebClient,
+    public readonly maxMessageLength: number
+  ) {}
 
   async postMessage(
     ctx: PlatformContext,
@@ -82,7 +85,9 @@ export class SlackPlatform implements Platform {
           text: `\`${outcome.toolName}\` — ${label}`,
           blocks: [],
         })
-        .catch(() => {});
+        .catch((err) => {
+          console.error("[SlackPlatform] Failed to dismiss approval:", (err as Error).message);
+        });
     }
   }
 

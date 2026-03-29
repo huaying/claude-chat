@@ -9,6 +9,7 @@ import { DiscordPlatform } from "./DiscordPlatform";
 import { SessionManager } from "../core/SessionManager";
 import { AutoApprovePolicy } from "../approval/AutoApprovePolicy";
 import type { AppConfig, DiscordConfig } from "../types/index";
+import { listClaudeSessions, formatSessionList } from "../core/sessions";
 
 export class DiscordBot {
   private client: Client;
@@ -23,7 +24,7 @@ export class DiscordBot {
       ],
     });
 
-    const platform = new DiscordPlatform(this.client);
+    const platform = new DiscordPlatform(this.client, appConfig.streaming.maxMessageLength.discord);
     const autoApprovePolicy = new AutoApprovePolicy(appConfig.autoApprove);
     this.sessionManager = new SessionManager(
       appConfig,
@@ -32,11 +33,15 @@ export class DiscordBot {
     );
 
     this.client.on(Events.MessageCreate, (message: Message) => {
-      void this.handleMessage(message);
+      this.handleMessage(message).catch((err) => {
+        console.error("[Discord] Message handler error:", err);
+      });
     });
 
     this.client.on(Events.InteractionCreate, (interaction: Interaction) => {
-      void this.handleInteraction(interaction);
+      this.handleInteraction(interaction).catch((err) => {
+        console.error("[Discord] Interaction handler error:", err);
+      });
     });
 
     // Store the token for start()
@@ -85,8 +90,9 @@ export class DiscordBot {
     const session = this.sessionManager.getOrCreate({ channelId, threadId });
 
     // Handle commands
-    if (/^\/cd\s+(.+)$/i.test(cleanText)) {
-      const newDir = cleanText.match(/^\/cd\s+(.+)$/i)![1].trim();
+    const cdMatch = cleanText.match(/^\/cd\s+(.+)$/i);
+    if (cdMatch) {
+      const newDir = cdMatch[1].trim();
       const { existsSync } = await import("node:fs");
       if (!existsSync(newDir)) {
         await message.reply(`Directory not found: \`${newDir}\``);
@@ -97,13 +103,41 @@ export class DiscordBot {
       return;
     }
 
+    if (/^\/sessions$/i.test(cleanText)) {
+      const sessions = await listClaudeSessions();
+      await message.reply(formatSessionList(sessions));
+      return;
+    }
+
+    const resumeMatch = cleanText.match(/^\/resume\s+(.+)$/i);
+    if (resumeMatch) {
+      const input = resumeMatch[1].trim();
+      const sessions = await listClaudeSessions();
+      const match = sessions.find((s) => s.sessionId.startsWith(input));
+      if (!match) {
+        await message.reply(`Session not found: \`${input}\`\nUse \`!sessions\` to list available sessions.`);
+        return;
+      }
+      if (match.active) {
+        await message.reply(`Session \`${match.sessionId.slice(0, 8)}\` is still active (PID ${match.pid}). Close it in the terminal first.`);
+        return;
+      }
+      session.resumeSession(match.sessionId);
+      session.setWorkingDir(match.cwd);
+      const name = match.name ? ` (${match.name})` : "";
+      await message.reply(`Resumed session \`${match.sessionId.slice(0, 8)}\`${name}\nWorking dir: \`${match.cwd}\``);
+      return;
+    }
+
     if (/^\/claude-reset$/i.test(cleanText)) {
       await this.sessionManager.destroy({ channelId, threadId });
       await message.reply("Session reset.");
       return;
     }
 
-    void session.handleUserMessage(cleanText);
+    session.handleUserMessage(cleanText).catch((err) => {
+      console.error("[Discord] Session error:", err);
+    });
   }
 
   private async handleInteraction(interaction: Interaction): Promise<void> {

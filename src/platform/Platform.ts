@@ -11,6 +11,9 @@ export interface MessageHandle {
 }
 
 export interface Platform {
+  /** Maximum message length for this platform. */
+  readonly maxMessageLength: number;
+
   /** Post a new message in the conversation thread. */
   postMessage(ctx: PlatformContext, text: string): Promise<MessageHandle>;
 

@@ -5,23 +5,16 @@ import type { AppConfig } from "../types/index";
 
 /**
  * Registry mapping "channelId::threadId" → Session.
- * Each platform gets its own SessionManager instance.
+ * Sessions live for the lifetime of the process.
  */
 export class SessionManager {
   private sessions = new Map<string, Session>();
-  private cleanupInterval: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly config: AppConfig,
     private readonly platform: Platform,
     private readonly autoApprovePolicy: AutoApprovePolicy
-  ) {
-    // Prune expired sessions every 5 minutes
-    this.cleanupInterval = setInterval(
-      () => void this.pruneExpired(),
-      5 * 60 * 1000
-    );
-  }
+  ) {}
 
   getOrCreate(ctx: PlatformContext): Session {
     const key = this.key(ctx);
@@ -48,22 +41,10 @@ export class SessionManager {
   }
 
   dispose(): void {
-    clearInterval(this.cleanupInterval);
+    // no-op, sessions cleaned up on process exit
   }
 
   private key(ctx: PlatformContext): string {
     return `${ctx.channelId}::${ctx.threadId}`;
-  }
-
-  private async pruneExpired(): Promise<void> {
-    const now = Date.now();
-    for (const [key, session] of this.sessions) {
-      const idle = now - session.state.lastActivityAt.getTime();
-      if (idle > this.config.session.timeoutMs) {
-        console.log(`[SessionManager] Pruning expired session: ${key}`);
-        await session.destroy();
-        this.sessions.delete(key);
-      }
-    }
   }
 }

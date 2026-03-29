@@ -7,7 +7,10 @@ import type {
 import { mdToTelegramHTML } from "./formatter";
 
 export class TelegramPlatform implements Platform {
-  constructor(private readonly bot: Telegraf<Context>) {}
+  constructor(
+    private readonly bot: Telegraf<Context>,
+    public readonly maxMessageLength: number
+  ) {}
 
   async postMessage(
     ctx: PlatformContext,
@@ -109,7 +112,9 @@ export class TelegramPlatform implements Platform {
           undefined,
           { inline_keyboard: [] }
         );
-      } catch {}
+      } catch (err) {
+        console.error("[TelegramPlatform] Failed to dismiss approval:", (err as Error).message);
+      }
     }
   }
 

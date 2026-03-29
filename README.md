@@ -51,7 +51,9 @@ All configuration is via environment variables (or `.env` file). At least one pl
 | `DEFAULT_WORKING_DIR` | `/tmp/claude-workspace` | Default working directory for Claude sessions |
 | `SESSION_TIMEOUT_MS` | `1800000` (30 min) | Idle sessions are cleaned up after this duration |
 | `STREAM_DEBOUNCE_MS` | `1500` | Debounce interval for streaming message updates |
-| `MAX_SLACK_MESSAGE_LENGTH` | `3000` | Truncate messages beyond this length |
+| `MAX_MESSAGE_LENGTH_SLACK` | `3000` | Max message length for Slack |
+| `MAX_MESSAGE_LENGTH_DISCORD` | `1900` | Max message length for Discord |
+| `MAX_MESSAGE_LENGTH_TELEGRAM` | `4000` | Max message length for Telegram |
 | `AUTO_APPROVE_TOOLS` | (empty) | Comma-separated tool names to auto-approve (e.g. `Read,Grep,Glob`) |
 
 ## Platform Setup
@@ -94,8 +96,12 @@ Just send a message in a channel where the bot is present:
 
 | Command | Description |
 |---|---|
-| `/cd <path>` | Change the working directory for the current session |
-| `/claude-reset` | Reset the current session (clear conversation history) |
+| `!cd <path>` | Change the working directory for the current session |
+| `!sessions` | List available Claude Code sessions (from terminal or other sources) |
+| `!resume <id>` | Resume a Claude Code session by ID (supports partial ID prefix match) |
+| `!reset` | Reset the current session (clear conversation history) |
+
+> Commands use `!` prefix because Slack reserves `/` for its own slash commands.
 
 ### Tool Approval
 
