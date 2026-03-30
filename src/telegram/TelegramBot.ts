@@ -69,10 +69,6 @@ export class TelegramBot {
           await ctx.reply(`Session not found: ${input}\nUse !sessions to list available sessions.`);
           return;
         }
-        if (match.active) {
-          await ctx.reply(`Session ${match.sessionId.slice(0, 8)} is still active (PID ${match.pid}). Close it in the terminal first.`);
-          return;
-        }
         session.resumeSession(match.sessionId);
         session.setWorkingDir(match.cwd);
         const name = match.name ? ` (${match.name})` : "";

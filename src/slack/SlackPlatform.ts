@@ -71,23 +71,26 @@ export class SlackPlatform implements Platform {
     handle: MessageHandle,
     outcome: { approved: boolean; toolName: string }
   ): Promise<void> {
+    const label = outcome.approved ? "approved" : "denied";
+    // Update first to remove buttons immediately (prevents double-clicks)
+    try {
+      await this.client.chat.update({
+        channel: ctx.channelId,
+        ts: handle.id,
+        text: `\`${outcome.toolName}\` — ${label}`,
+        blocks: [],
+      });
+    } catch (err) {
+      console.error("[SlackPlatform] Failed to update approval message:", (err as Error).message);
+    }
+    // Then try to delete entirely
     try {
       await this.client.chat.delete({
         channel: ctx.channelId,
         ts: handle.id,
       });
     } catch {
-      const label = outcome.approved ? "allowed" : "denied";
-      await this.client.chat
-        .update({
-          channel: ctx.channelId,
-          ts: handle.id,
-          text: `\`${outcome.toolName}\` — ${label}`,
-          blocks: [],
-        })
-        .catch((err) => {
-          console.error("[SlackPlatform] Failed to dismiss approval:", (err as Error).message);
-        });
+      // update already removed the buttons, so this is fine
     }
   }
 

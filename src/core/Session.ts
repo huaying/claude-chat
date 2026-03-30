@@ -7,6 +7,7 @@ import type { Platform, PlatformContext } from "../platform/Platform";
 import { ApprovalGate } from "../approval/ApprovalGate";
 import { AutoApprovePolicy } from "../approval/AutoApprovePolicy";
 import { StreamingUpdater } from "./StreamingUpdater";
+import { getSessionEntry, setSessionEntry } from "./sessionStore";
 import type { SessionState, AppConfig } from "../types/index";
 
 export class Session {
@@ -21,16 +22,23 @@ export class Session {
     private readonly platform: Platform,
     private readonly autoApprovePolicy: AutoApprovePolicy
   ) {
+    // Restore previous session if process was restarted
+    const prev = getSessionEntry(`${ctx.channelId}::${ctx.threadId}`);
+
     this.state = {
       ctx,
-      claudeSessionId: null,
-      workingDir: config.claude.defaultWorkingDir,
+      claudeSessionId: prev?.claudeSessionId ?? null,
+      workingDir: prev?.cwd ?? config.claude.defaultWorkingDir,
       createdAt: new Date(),
       lastActivityAt: new Date(),
       status: "idle",
       activeMessageHandle: null,
       activeMessageText: "",
     };
+
+    if (prev) {
+      console.log(`[Session] Restored session: ${prev.claudeSessionId.slice(0, 8)}`);
+    }
     this.approvalGate = new ApprovalGate();
     this.updater = new StreamingUpdater(
       platform,
@@ -171,6 +179,10 @@ export class Session {
       case "system":
         if (event.subtype === "init") {
           this.state.claudeSessionId = event.session_id;
+          setSessionEntry(
+            `${this.state.ctx.channelId}::${this.state.ctx.threadId}`,
+            { claudeSessionId: event.session_id, cwd: this.state.workingDir }
+          );
         }
         break;
 

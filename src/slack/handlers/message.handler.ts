@@ -62,14 +62,6 @@ export function registerMessageHandler(
         return;
       }
 
-      if (match.active) {
-        await say({
-          thread_ts: threadId,
-          text: `Session \`${match.sessionId.slice(0, 8)}\` is still active (PID ${match.pid}). Close it in the terminal first.`,
-        });
-        return;
-      }
-
       const session = sessionManager.getOrCreate({ channelId, threadId });
       session.resumeSession(match.sessionId);
       session.setWorkingDir(match.cwd);
